@@ -1,4 +1,4 @@
-
+ 
 
 
 bool isTable=true;
@@ -10,16 +10,17 @@ bool isTable=true;
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
-//#include "mariomap.h"
+#include "mariomap.h"
 #include "painting2.h"
- //#include "movie3.h"
+
 
 #include <WebSocketsServer.h>
 
-
-
+#define NUM_STRIPS 16
+#define FastMask(MASK) ((MASK & 1) << 2 ) | ((MASK & 6) << 3 ) | ((MASK & 2040) << 9 ) | ((MASK & 14336) << 10 ) | ((MASK & 49152) << 11 )
 //ESP8266WiFiMulti WiFiMulti;
-
+#include "SD.h"
+#include "SPI.h"
 //WebSocketsServer webSocket = WebSocketsServer(81);
 
 //#define FASTLED_FORCE_SOFTWARE_SPI
@@ -35,8 +36,8 @@ int cos_table[123];
 char mess[255];
 static int anim=0;
 WebServer server(80);
-WebSocketsServer webSocket = WebSocketsServer(81);
-//#include <Artnet.h>
+//WebSocketsServer webSocket = WebSocketsServer(81);
+#include <Artnet.h>
 const char* ssid     = "yourssid";
 const char* password = "yourpasswd";
 
@@ -45,9 +46,9 @@ WiFiUDP Udp2;
 //#define PINS_MASK calculMask()
 //#define calculMask() ({ int t[(NUM_STRIPS)]={PINS_OUTPUT};int result = 0; for(int i=0;i<(NUM_STRIPS);i++){result=result+ (1<<t[i]);} result; })
 
-#define PORT_MASK 0b110111011111111000000110100  //0b1001111111000000111101
+#define PORT_MASK 0b111110111011111111000000110100  //0b1001111111000000111101
 //#define PORT_MASK   0b000000000000000000
-#define NUM_STRIPS 16
+
 #define PINS_OUTPUT  0,1,2,4,5,14,23,25,26,21,22,16
 
 
@@ -97,14 +98,14 @@ const byte dataPin = 2;
 
 
 // Artnet settings
-//Artnet artnet;
+Artnet artnet;
 const int startUniverse = 0; // CHANGE FOR YOUR ma most software this is 1, some software send out artnet first universe as 0.
 int previousDataLength = 0;
 
 byte broadcast[] = {10, 0, 1, 255};
 
 
-
+//this function is only used for me 'cause half of my strip are GRB instead of RGB
 
 void replaceled()
 {
@@ -838,7 +839,7 @@ void FastLEDshowESP32()
         xTaskNotifyGive(FastLEDshowTaskHandle);
 
         // -- Wait to be notified that it's done
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS( 500 ));//portMAX_DELAY);
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         //delay(100);
         //interrupts();
         userTaskHandle = 0;
@@ -861,7 +862,7 @@ void FastLEDshowESP322()
         //to thge contrary to the other one we do not wait for the display task to come back
     }
 }
-
+static long time3=ESP.getCycleCount();
 void FastLEDshowTask(void *pvParameters)
 {
     const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 500 );
@@ -870,16 +871,17 @@ void FastLEDshowTask(void *pvParameters)
         // -- Wait for the trigger
         ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
         
-
+      time3=ESP.getCycleCount();
     
         FastLED.show();
+        Serial.printf("FPS:%f\n",(float)(240000000/(ESP.getCycleCount()-time3)));
 
     
         xTaskNotifyGive(userTaskHandle);
     }
 }
 
-static long time3=ESP.getCycleCount();
+
 void FastLEDshowTask2(void *pvParameters)
 {
     const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 500 );
@@ -890,12 +892,15 @@ void FastLEDshowTask2(void *pvParameters)
         
             
             if (anim==0)
-                      displayPicNew(artnet.getframe(),0,0,48,123); //for the artnet
+             //  int i=0;
+                     // displayPicNew(artnet.getframe(),0,0,48,123); //for the artnet
+                       memcpy(leds,artnet.getframe(),123*48*sizeof(CRGB));
             else
                 memcpy(leds,Tpic,123*48*sizeof(CRGB));
             
             replaceled();
-            FastLED.show();
+            //delay(1),
+           FastLED.show();
             
                userTaskHandle=0; //so we can't have two display tasks at the same time
                  
@@ -1125,16 +1130,19 @@ byte newStatus(byte x,byte y)
         return bornwhendead[nb];
 }
 
+ int hue=0;
 void gameOflife()
 {
+ 
    long time1=ESP.getCycleCount();
    if(ongoing)
    {
+     hue=(hue+1)%255;
     for(byte i=0;i<LED_WIDTH;i++)
         for(byte j=0;j<LED_HEIGHT;j++)
         {
             if(newStatus(i,j))
-                Tpic[i+j*LED_WIDTH]=CRGB::Red;
+                Tpic[i+j*LED_WIDTH]=CHSV(hue,255,140);//CRGB::Red;
             else
                 Tpic[i+j*LED_WIDTH]=bgColor;
         }
@@ -1146,7 +1154,7 @@ void gameOflife()
             Tpic[15+y*LED_WIDTH]=CRGB::Red;*/
         for(int l=0 ;l<LED_WIDTH*LED_HEIGHT;l++)
             if(random(20)%3==0)
-                Tpic[l]=CRGB::Red;
+                Tpic[l]=CHSV(hue,128,128);//CRGB::Red;
         ongoing=true;
     }
     
@@ -2229,8 +2237,9 @@ void fill(CRGB color)
     fill_solid(Tpic, NUM_LEDS, color);
 }
 
+#include "barpc.h"
 
-#include "pacmanlib.h"
+/*
 int directionp=1;
 int onbouge=-1;
 
@@ -2385,12 +2394,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     }
 
 }
-
+*/
 #include "tetris3.h"
 
 #include "tetris2.h"
  #include "paint.h"
-
+#include "snake.h"
+#include "pacmanlib.h"
 bool firsttime=true;
 
 
@@ -2412,32 +2422,54 @@ void initServer()
 
 
 server.on("/anim", HTTP_GET, [] {
+  int newanim;
         //fill_solid(leds, NUM_LEDS, solidColor);
         //FastLED.show();
         Serial.println("anim");
-         anim=(anim+1)%11;
-         if (anim==8)
+        String g=server.arg("v");
+        Serial.println(g);
+        newanim=atoi(g.c_str());
+        /*char m[20];
+        memset(m,0,20);
+        sprintf(m,"%s",g.c_str());
+        sscanf ((const char*)m,"%d",&newanim);*/
+         Serial.printf("new anim:%s\n",g);
+        Serial.printf("new anim:%d\n",newanim);
+         newanim=newanim%13;
+         if (anim==7)
      {
            timerAlarmDisable(timer);
           inGame=false;
      }
          if(anim==0)
          {
-          //free(artnetPacket);
-           // Udp.stop();
-         anim=1;
+         // Udp.stop();
+         //free(artnetPacket);
+           
+        // anim=1;
+         artnet.stop();
           
          }
-        if( anim==6)
+        if( anim==5)
         {
-            free(artnetPacket2);
             Udp2.stop();
-    }
+            free(artnetPacket2);
+            }
+            anim=newanim;
          firsttime=true;
               server.send ( 200, "text/plain", "this works as well" );
         
         // i=0;
     });
+
+
+
+
+
+server.on("/restart",HTTP_GET, [] {
+  ESP.restart();
+});
+    
     
       server.on("/changetext", HTTP_GET, []() {
         //fill_solid(leds, NUM_LEDS, solidColor);
@@ -2484,22 +2516,29 @@ server.on("/anim", HTTP_GET, [] {
     initlamp();
   initTetris();
   initPaint();
+  initSnake();
+  //initPacman();
     
 }
 
 
-
+uint8_t *readbuffer;
+char filename[256];
 
   uint32_t syncmax1=0;
   uint32_t syncmax2=0;
 void setup() {
+   Serial.begin(115200);
+   Serial.println("ee");
+   pinMode(27, OUTPUT);
+   digitalWrite(27,HIGH);
   String g="message depart";
- // artnet.setframe((CRGB*)malloc(48*64*sizeof(CRGB))) ;
+ 
   g.toCharArray(mess, g.length()+1);
-  anim=5;
-  xTaskCreatePinnedToCore(FastLEDshowTask, "FastLEDshowTask", 1000, NULL,2, &FastLEDshowTaskHandle, FASTLED_SHOW_CORE);
+  anim=1;
+  xTaskCreatePinnedToCore(FastLEDshowTask, "FastLEDshowTask", 2000, NULL,2, &FastLEDshowTaskHandle, FASTLED_SHOW_CORE);
   xTaskCreatePinnedToCore(FastLEDshowTask2, "FastLEDshowTask2", 2000, NULL,3, &FastLEDshowTaskHandle2, FASTLED_SHOW_CORE);
-  Serial.begin(115200);
+ 
   calculatecos();
   // LEDS.addLeds<WS2812_PORTA,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
   // LEDS.addLeds<WS2811_PORTB,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
@@ -2561,17 +2600,26 @@ static uint8_t buf[2500];
     Serial.printf("Connecting ");
     WiFi.begin("WiFi-2.4-E19C", "yvesyves");
 //WiFi.begin("DomainePutterie", "Jeremyyves");
-    while (WiFi.status() != WL_CONNECTED) {
+int retrywifi=0;
+    while (WiFi.status() != WL_CONNECTED && (retrywifi<40)) {
       Serial.println(WiFi.status());
-      /*
-Connecting ........[D][WiFiGeneric.cpp:293] _eventCallback(): Event: 5 - STA_DISCONNECTED
-[W][WiFiGeneric.cpp:298] _eventCallback(): Reason: 2 - AUTH_EXPIRE
-....[D][WiFiGeneric.cpp:293] _eventCallback(): Event: 5 - STA_DISCONNECTED
-[W][WiFiGeneric.cpp:298] _eventCallback(): Reason: 201 - AUTH_FAIL
-*/
-      
-        delay(500);
-        Serial.print(".");
+   
+      retrywifi++;
+        delay(200);
+        //Serial.print(".");
+    }
+    if(WiFi.status() != WL_CONNECTED)
+    {
+              WiFi.begin("WiFi-2.4-E19C", "yvesyves");
+        //WiFi.begin("DomainePutterie", "Jeremyyves");
+        retrywifi=0;
+            while (WiFi.status() != WL_CONNECTED && (retrywifi<40)) {
+              Serial.println(WiFi.status());
+           
+              retrywifi++;
+                delay(200);
+                //Serial.print(".");
+            }
     }
 
     Serial.println("");
@@ -2579,37 +2627,42 @@ Connecting ........[D][WiFiGeneric.cpp:293] _eventCallback(): Event: 5 - STA_DIS
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
     
-    
+      /* if (!MDNS.begin("esp32")) {
+        Serial.println("Error setting up MDNS responder!");
+        while(1) {
+            delay(1000);
+        }
+    }
+    Serial.println("mDNS responder started");*/
 
          SPIFFS.begin();
-   /*  int levels=1;
-     File root = SPIFFS.open("/");
-      File file = root.openNextFile();
-    while(file){
-        if(file.isDirectory()){
-            Serial.print("  DIR : ");
-            Serial.println(file.name());
- 
-        } else {
-            Serial.print("  FILE: ");
-            Serial.print(file.name());
-            Serial.print("  SIZE: ");
-            Serial.println(file.size());
-             file.read(buf, 512);
-            Serial.printf("bytes in %d\n %s\n",2,buf);
-        }
-        file = root.openNextFile();
-    }*/
+   
 
- //ws.onEvent(onWsEvent);
-  //server.addHandler(&ws);
+/*
+SPI.begin(33,35,32,27);
+    
+    if(!SD.begin(27,SPI,80000000)){
 
-  //events.onConnect([](AsyncEventSourceClient *client){
-   // client->send("hello!",NULL,millis(),1000);
-  //});
-  //server.addHandler(&events);
-
-
+        Serial.println("Card Mount Failed");
+        
+    }
+    else
+    {
+          Serial.println("SD found");
+          uint8_t cardType = SD.cardType();
+      
+          if(cardType == CARD_NONE){
+              Serial.println("No SD card attached");
+              return;
+          }
+      
+          memset(filename, 0, 255);
+          sprintf(filename,"/%s.dat",READ_NAME);
+       myFile = SD.open(filename);
+       if(!myFile)
+          Serial.println("no file found");
+    }
+*/
     //initTetris();
     initServer();
      server.begin();
@@ -2618,8 +2671,9 @@ Connecting ........[D][WiFiGeneric.cpp:293] _eventCallback(): Event: 5 - STA_DIS
     //initTetrisScoketControl();
        fill(CRGB(10, 10, 10));
        // FastLED.show();
-
-         //artnet.begin(123*48,170);
+ //artnet.setframe((CRGB*)malloc(48*64*sizeof(CRGB))) ;
+          
+           //MDNS.addService("http", "tcp", 80);
            
            
  
@@ -2698,7 +2752,7 @@ bool firstpacket=false;
 void loop() {
   //char mess[]="MOI JE SUIS QUI JE SUIS PAMELA";
  
-  k = k % ((35+1)*5000-1);
+ // k = k % ((35+1)*5000-1);
   
     int offset = LED_WIDTH;
     long time0=ESP.getCycleCount();
@@ -2723,12 +2777,21 @@ case 5:
     firstpacket=false;
     firsttime=false;
     fill(bgColor);
-    afficheMessage("READY TO STREAM", 0, 20);
+    afficheMessage("READY TO STREAM", 1, 20);
     replaceled();
     FastLEDshowESP32();
     FastLEDshowESP32();
     Udp2.begin(100);
-     artnetPacket2=(char*)malloc((123*3*3+1)*sizeof(char));
+     artnetPacket2=(char*)malloc((123*3*2+1)*sizeof(char));
+     if(artnetPacket2==NULL)
+      {
+        Serial.println("impossible to create buffer");
+        break;
+      }
+      else
+      {
+        Serial.println("buffer créé");
+      }
      disp=false;
  
   }
@@ -2741,11 +2804,11 @@ case 5:
 int packetSize = Udp2.parsePacket();
       if(packetSize>0)
       {
-       // Serial.printf("size:%d\n",packetSize);
+       //Serial.printf("size:%d\n",packetSize);
         firstpacket=true;
       Udp2.read(artnetPacket2, packetSize);
       memcpy(&Tpic[123*2*(artnetPacket2[0])],artnetPacket2 + 1,123*3*2);
-//      Serial.printf("univers:%d\n",artnetPacket[0]);
+     //Serial.printf("univers:%d\n",artnetPacket2[0]);
       if(artnetPacket2[0]==255)
       {
         Serial.printf("new value bru:%d\n",artnetPacket2[1]);
@@ -2783,6 +2846,30 @@ int packetSize = Udp2.parsePacket();
 
   break;
 
+case 11:
+{
+  disp=false;
+  if(firsttime)
+  {
+    afficheMessage("SNAKE", 1, 20);
+   
+    replaceled();
+    FastLEDshowESP32();
+    FastLEDshowESP32();
+     delay(2000);
+    newSnake();
+    firsttime=false;
+  }
+  //FastLEDshowESP322();
+  if(k%snakeInterval==0)
+  {
+    moveSnake();
+   //displaySnake();
+  }
+   executeSnakeSocketControl();
+}
+break;
+
   
   case 0:
   {
@@ -2792,16 +2879,17 @@ int packetSize = Udp2.parsePacket();
     firsttime=false;
     fill(bgColor);
     afficheMessage("READY FOR ARTNET", 1, 20);
+     artnet.begin(123*48,170,1);
+    //artnet.begin(123*10,123,1);
     replaceled();
     FastLEDshowESP32();
     FastLEDshowESP32();
   }
     disp=false;
-  //artnet.read();
-
-              FastLEDshowESP322();
+  if(artnet.read()==1)
+      FastLEDshowESP322();
                //xTaskNotifyGive(FastLEDshowTaskHandle2);
-    //          artnet.resetsync();
+             artnet.resetsync();
              // Serial.println("on affiche");
               
 ///          }
@@ -2927,6 +3015,14 @@ fill(bgColor);
 }
 break;
 
+
+case 12:
+{disp=true;
+   displayBitmapFromProgmem(mariomap,-k%1720+120,0,48,860);
+ displayBitmapFromProgmem(mariomap ,-k%1720+120+860,0,48,860);
+ replaceled();
+}
+break;
 case 3:
 {
            if(firsttime)
@@ -2982,7 +3078,7 @@ case 10:
  {
  String g="Enter you message:http://192.168.1.57/index.html";
 
- // artnet.setframe((CRGB*)malloc(48*64*sizeof(CRGB))) ;
+  //artnet.setframe((CRGB*)malloc(48*64*sizeof(CRGB))) ;
   g.toCharArray(mess, g.length()+1);
   setTableBrightness(64);
   firsttime=false;
@@ -3005,237 +3101,33 @@ for(int l=0 ;l<1;l++)
 replaceled();
 }
 break;
-/*
-int pacx=0;
-int pacy=0;
-int face=0;*/
 
-//fill(CRGB::Black);
-
-//displayPicNew(boardpacman,0,mapy,48,28*4); 
-//calculpacboard(mapy);
-/*
-if(ghostx-pacx <0)
-{
-  
-   if(canMoveRight(ghostx,ghosty) and oldmove !=3)
-   {
-      ghostx+=tempo(k);
-      newmove=1;
-      
-   }
-    else
-    {
-      if(ghosty-pacy<0)
-      {
-        if(canMoveUp(ghostx,ghosty) and oldmove !=4)
-        {
-          ghosty+=tempo(k);
-          newmove=2;
-        }
-        else
-        {
-          if(canMoveDown(ghostx,ghosty) 
-          
-          
-          
-          )
-          {
-           ghosty-=tempo(k);
-           newmove=4;
-          }
-    
-        }
-      }
-      else
-      {
-        if(canMoveDown(ghostx,ghosty) and oldmove!=1)
-        {
-          ghosty-=tempo(k);
-          newmove=4;
-        }
-        else
-        {
-          if(canMoveUp(ghostx,ghosty))
-            {
-              ghosty+=tempo(k);
-              newmove=1;
-            }
-        }
-      }
-    }
-
-  if(newmove==0)
+case 13:
+{  disp=true;;
+  if(firsttime)
   {
-    ghostx-=tempo(k);
-    newmove=3;
+      afficheMessage("PAC MAN", 1, 20);
+   
+    replaceled();
+    FastLEDshowESP32();
+    FastLEDshowESP32();
+     delay(2000);
+    //newPacman();
+    firsttime=false;
   }
-}
-else
-{
- Serial.println("a gauche"); 
-   if(canMoveLeft(ghostx,ghosty) and oldmove!=1)
-   {
-      ghostx-=tempo(k);
-      newmove=3;
-      
-   }
-    else
-    {
-      Serial.println("on peut pas gauche"); 
-      if(ghosty-pacy<0)
-      {
-        if(canMoveUp(ghostx,ghosty) and oldmove!=4)
-        {
-          ghosty+=tempo(k);
-          newmove=1;
-        }
-        else
-        {
-          Serial.println("on tente descente"); 
-          if(canMoveDown(ghostx,ghosty) )
-          {
-           ghosty-=tempo(k);
-           newmove=4;
-          }
-        }
-      }
-      else
-      {
-        Serial.println("on tente descente 2"); 
-        if(canMoveDown(ghostx,ghosty) and oldmove!=2)
-        {
-          ghosty-=tempo(k);
-          newmove=4;
-        }
-        else
-        {
-          Serial.println("on monte"); 
-          if(canMoveUp(ghostx,ghosty) )
-            {
-              ghosty+=tempo(k);
-              newmove=2;
-            }
-        }
-      }
-    }
-if(newmove==0)
+  else
   {
-    ghostx+=tempo(k);
-    newmove=1;
+    //if(k%pacmanInterval==0)
+ // {
+    //movePacman();
+   //displaySnake();
+  //}
+   // delay(5);
   }
-
-    
-}
-oldmove=newmove;
-newmove=0;
-
-Serial.printf("pac %d %d g %d %d\n",pacx,pacy,ghostx,ghosty);
-*/
-//fill(CRGB::Black);
-/*
-static uint8_t hue = 0;
-   for(int i = 0; i < LED_HEIGHT;i++) {
-                    for(int j = 0; j < LED_WIDTH; j++) {
-                      leds[i*LED_WIDTH + j] = CHSV((32*i) + k,192,255);
-                    }
-                  }
-                  k+=10;*/
-
-
-/*
-if(onbouge==0)
-{
-    switch (directionp){
-      case 1:
-      if( canMoveRight(pacx,pacy) )  
-      {
-        onbouge=1;
-            
-      }
-      else
-       onbouge=-1;
-      break;
-      case 2:
-       // f(r<=(-130+LED_HEIGHT/2)-2)
-        if( canMoveUp(pacx,pacy) )  
-      {
-        onbouge=1;
-      }
-            else
-       onbouge=-1;
-      break;
-      case 3:
-        if( canMoveLeft(pacx,pacy) )  
-      {
-        onbouge=1;
-      }
-            else
-       onbouge=-1;
-      break;
-      case 4:
-      if( canMoveDown(pacx,pacy) )
-      {
-        onbouge=1;
-      }
-            else
-       onbouge=-1;
-      break;
-    }
-}
-
-if(onbouge>=1)
-{
- switch (directionp){
-    case 1:
-      pacx+=1;
-     break;
-    case 3:
-      pacx-=1;
- break;
-    case 2:
-        if(pacy>=24 and mapy >  (-31*4+48))
-         {
-          mapy-=1;
-          pacy+=1;
-          vpacy=24;
-         }
-         else
-         {
-           //if(pacy<48-5){
-              pacy+=1;
-              vpacy+=1;
-            //}   
-         }
-
- break;
-    case 4:
-        if(vpacy>=24 and vpacy<25 and mapy < 0)
-         {
-          mapy+=1;
-          pacy-=1;
-          vpacy=24;
-         }
-         else
-         {
-          // if(pacy>0){
-              pacy-=1;
-              vpacy-=1;
-            //}   
-         }
-     break;
   
- }
- onbouge=(onbouge+1)%5;
- if(onbouge==0)
-    onbouge=-1; //on stoppe pacman
+//executePacmanSocketControl();
 }
-displayBitmapFromProgmem(pacboardfull,1,mapy,31*4,112); 
-displaygifdir(pacmancalc,pacx,vpacy,8,8,(k/7)%4,directionp);
-displayPicNew(ghostpc,ghostx,ghosty,8,9);
-
-replaceled();
-*/
+break;
 
 //fill(CRGB::Black);
 
@@ -3250,7 +3142,7 @@ case 4:
   firsttime=false;
  }
 //delay(200);
-bgColor=CRGB(10,10,10);
+bgColor=CRGB(4,4,4);
 if(k%600==0)
   ongoing=false;
 gameOflife();
