@@ -49,7 +49,7 @@ function buttonclick(e) {
 </script>
 </head>
 <body  onload="">
-
+NEW VERSION
 <button id="up">UP</button>
 <button id="down">DOWN</button>
 <button id="up2">UP2</button>
@@ -68,7 +68,8 @@ VITESSE:<input type="text" id="speed" value="100"><button id="sp">UPDATE SPEED</
 </form>
 <button id="bg">UPDATE BACKGROUND COLOR</button><button id="c">UPDATE ETXT COLOR</button><br/>
 LUMINOSITE:<input type="text" id="bri" value="100"><button id="br">UPDATE LUMINOSITE</button>
-
+GAMMAR:<input type="text" id="gammar" value="2.3"><button id="gr">UPDATE GAMMAR</button>
+GAMMAR:<input type="text" id="gammab" value="2.3"><button id="gb">UPDATE GAMMAB</button>
   
   
   <script>
@@ -176,8 +177,18 @@ $("#br").click(function(){
 //alert($("#scrolltext").attr("value"));
 $.get(urlBase+"/b?r="+parseInt($("#bri").val()),function(data){}); 	
 });	
-	
-	
+
+$("#gr").click(function(){
+               //$.get(urlBase+"/change?v=scroll",function(data){});
+               //alert($("#scrolltext").attr("value"));
+               $.get(urlBase+"/gr?r="+parseInt($("#gammar").val()),function(data){});
+               });
+
+  $("#gb").click(function(){
+                                  //$.get(urlBase+"/change?v=scroll",function(data){});
+                                  //alert($("#scrolltext").attr("value"));
+                                  $.get(urlBase+"/gb?r="+parseInt($("#gammab").val()),function(data){});
+                                  });
 </script>
 </body>
 </html>

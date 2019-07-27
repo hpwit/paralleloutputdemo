@@ -24,9 +24,11 @@ bool isTable=true;
 //WebSocketsServer webSocket = WebSocketsServer(81);
 
 //#define FASTLED_FORCE_SOFTWARE_SPI
-#define USE_SPI 1
-#define FASTLED_ALLOW_INTERRUPTS 0
-#define INTERRUPT_THRESHOLD 1
+//#define USE_SPI 1
+//#define FASTLED_ALLOW_INTERRUPTS 0
+//#define INTERRUPT_THRESHOLD 1
+#define ESP_I2S 1
+#define FASTLED_ESP32_I2S 1
 #include "FastLED.h"
 FASTLED_USING_NAMESPACE
 #define FASTLED_SHOW_CORE 0
@@ -40,8 +42,43 @@ WebServer server(80);
 #include <Artnet.h>
 const char* ssid     = "yourssid";
 const char* password = "yourpasswd";
-
+char filename[256];
+char READ_NAME[]="savedata2"; //the name of your save
+//Artnet artnet;
+#ifndef ESP_I2S
+//#include "I2S.h"
+#endif
+    
+int Pins[16]={2,4,5,12,13,14,15,16,17,18,19,21,22,23,25,26};
+#ifndef ESP_I2S
+//I2S controller(0);
+#endif
+File root;
+File  myFile;
 WiFiUDP Udp2;
+
+#define LED_TYPE    WS2812B
+#define COLOR_ORDER GRB
+
+#define LED_PIN1    2
+#define LED_PIN2    4
+#define LED_PIN3    5
+#define LED_PIN4    12
+
+#define LED_PIN5    13
+#define LED_PIN6    14
+#define LED_PIN7    15
+#define LED_PIN8    16
+//--------//--------
+#define LED_PIN9     17
+#define LED_PIN10    18
+#define LED_PIN11    19
+#define LED_PIN12    21
+
+#define LED_PIN13    22
+#define LED_PIN14    23 //25
+#define LED_PIN15    25 //33
+#define LED_PIN16    26 //32
 
 //#define PINS_MASK calculMask()
 //#define calculMask() ({ int t[(NUM_STRIPS)]={PINS_OUTPUT};int result = 0; for(int i=0;i<(NUM_STRIPS);i++){result=result+ (1<<t[i]);} result; })
@@ -67,6 +104,8 @@ WiFiUDP Udp2;
 #define UP_LEFT_INV      6
 #define UP_RIGHT_INV     7
   char OUTPUT_PINS[]={0,1,2,7,8,9,26,14,22,18,19,23};
+uint8_t kMatrixWidth = LED_WIDTH;
+ uint8_t kMatrixHeight = LED_HEIGHT;
 
 CRGB solidColor = CRGB(0, 0, 0);
 CRGB bgColor = CRGB(10,10,10);
@@ -76,8 +115,9 @@ CRGB fraiseCalc[110];
 CRGB transparent = CRGB(1, 1, 1);
 CRGB lettrefont1[35];
 CRGB lettrefont2[64];
-CRGB leds[NUM_LEDS+1];
-CRGB Tpic[NUM_LEDS+1];
+CRGB leds[NUM_LEDS];
+uint8_t *readbuffer;
+CRGB *Tpic;
 //unsigned char Tpic2[NUM_LEDS*3+1];
 int tableOrientation=DOWN_RIGHT; //DOWN_RIGHT_INV;
 long int k=0;
@@ -95,7 +135,7 @@ char *artnetPacket2;
 const int numLeds = 240; // change for your setup
 const int numberOfChannels = numLeds * 3; // Total number of channels you want to receive (1 led = 3 channels)
 const byte dataPin = 2;
-
+#include "vortex.h"
 
 // Artnet settings
 Artnet artnet;
@@ -109,6 +149,7 @@ byte broadcast[] = {10, 0, 1, 255};
 
 void replaceled()
 {
+ // return;
   int offset=0;
   for(int i=0;i<123;i++)
  {
@@ -147,6 +188,7 @@ uint8_t  gammar[] = {
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,8,8,8,9,9,9,10,10,10,11,11,11,12,12,13,13,14,14,14,15,15,16,16,17,17,18,18,19,19,20,21,21,22,22,23,23,24,25,25,26,27,27,28,29,29,30,31,31,32,33,34,34,35,36,37,37,38,39,40,41,42,42,43,44,45,46,47,48,49,50,51,52,52,53,54,55,56,57,59,60,61,62,63,64,65,66,67,68,69,71,72,73,74,75,77,78,79,80,82,83,84,85,87,88,89,91,92,93,95,96,98,99,100,102,103,105,106,108,109,111,112,114,115,117,119,120,122,123,125,127,128,130,132,133,135,137,138,140,142,144,145,147,149,151,153,155,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,190,192,194,197,199,201,203,205,207,210,212,214,216,219,221,223,226,228,230,233,235,237,240,242,245,247,250,252,255,
     
 };
+
 void gammareplace()
 {
   int offset=0;
@@ -169,7 +211,7 @@ void gammareplace()
   }
 
 }
-
+/*
 CRGB artnetled[32*32];
 word readyd=0;
 void onDmxFrame(uint16_t universe, uint16_t length, uint8_t sequence, uint8_t* data, IPAddress remoteIP)
@@ -182,7 +224,7 @@ void onDmxFrame(uint16_t universe, uint16_t length, uint8_t sequence, uint8_t* d
     int offset = 3*i;//+universe_size*(universe-1)*3;
     if (offset< NUM_LEDS)
       artnetled[i+universe_size*(universe-1)]=CRGB( data[offset], data[offset + 1], data[offset + 2]);
-  }*/
+  }
   //  memcpy(&leds[LED_WIDTH * y], &Tpic[(y - y0) *wmin - x0], nh * sizeof(CRGB));
 memcpy(&artnetled[universe_size*(universe-1)],data,128*3);
  if(universe<5)
@@ -204,12 +246,12 @@ void onSync(IPAddress remoteIP) {
      replaceled();
   FastLEDshowESP32();
 }
-
+*/
 
 #include "lamp.h"
 
 float gammaCorrection=2.3;
-
+float gammaCorrectionr=2.5;
 
 void calculatecos()
 {
@@ -217,8 +259,9 @@ void calculatecos()
   for(int i=0;i<123;i++)
  {
   //jj
-   cos_table[i]=(int)abs((48-1)*(abs(cos(3.14*i/60)) ));
-   Serial.println(cos_table[i]);
+  // cos_table[i]=(int)abs((48-1)*(abs(cos((float)(3.14*i/123))) ));
+   cos_table[i]= abs(47*cos((float)(3.14*i/123)));
+   Serial.printf("%d %d %f\n",i,cos_table[i],abs(47*cos((float)(3.14*2*i/123))) );
  } 
  
 }
@@ -232,15 +275,15 @@ void calculateGammaTable()
     float correctGamma=powf((float)tableBrightness/255,1/gammaCorrection);
     Serial.print("gamma correction:");
     Serial.println(correctGamma);
-    correctGamma=1;
+    //correctGamma=1;
     for (int i=0;i<256;i++)
     {
  
         float newValue=255*powf((float)i/255,correctGamma*gammaCorrection);
         //Serial.println(newValue);
         gamma8[i]=(int)newValue;
-        //Serial.println(gamma8[i]);
-        newValue=255*powf((float)i/255,correctGamma*(gammaCorrection+0.2));
+       // Serial.println(gamma8[i]);
+        newValue=255*powf((float)i/255,correctGamma*(gammaCorrectionr));
         gammar[i]=(int)newValue;
         //Serial.println(gamma8[i]);
     }
@@ -248,8 +291,8 @@ void calculateGammaTable()
 
 void setTableBrightness(int b)
 {
-   
    FastLED.setBrightness(b);
+    //controller.setBrightness(b);// controller.setBrightness(b);// controller.setBrightness(b);// controller.setBrightness(b);//
     tableBrightness=b;
     calculateGammaTable();
 }
@@ -766,13 +809,15 @@ void afficheLettre2(int let,int x0,int y0)
     {
 //Serial.printf("%d ",mess[i]);
   
-       if(mess[i]=='\n')
+       if(mess[i]==13)
       {
         d++;
-        Serial.printf("\n d:%d \n",d);
+        //Serial.printf("\n d:%d \n",d);
         dx=i+1;
+        //dx=dx-10;
         if (y-d*8<=-8)
          return;
+         
       }
       else
       {
@@ -783,12 +828,14 @@ void afficheLettre2(int let,int x0,int y0)
           //  return;
     }
     }
-  Serial.println("fin message");  
+  //Serial.println("fin message");  
 }
 
 
 void afficheMessage(char *mess,int x,int y)
 {
+      int d=0;
+    int dx=0;
     if (!mess)
         return;
     int taille=strlen(mess);
@@ -799,14 +846,17 @@ void afficheMessage(char *mess,int x,int y)
     {
       if(mess[i]==13)
       {
-        y=y-6;
-        if (y<=-6)
+ d++;
+        //Serial.printf("\n d:%d \n",d);
+        dx=i+1;
+        //dx=dx-10;
+        if (y-d*6<=-6)
          return;
       }
       else
       {
-       if(x+i*6 > -6 and x+i*6 <LED_WIDTH)
-        afficheLettre(mess[i]-32, x+i*6,y);
+       if(x+(i-dx)*6 > -6 and x+(i-dx)*6 <LED_WIDTH)
+        afficheLettre(mess[i]-32,x+(i-dx)*6,y-d*8);
         
         //if (x+i*6>= LED_WIDTH)
           //  return;
@@ -871,10 +921,11 @@ void FastLEDshowTask(void *pvParameters)
         // -- Wait for the trigger
         ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
         
-      time3=ESP.getCycleCount();
+     // time3=ESP.getCycleCount();
     
-        FastLED.show();
-        Serial.printf("FPS:%f\n",(float)(240000000/(ESP.getCycleCount()-time3)));
+         //controller.showPixels(); /
+     FastLED.show();
+       // Serial.printf("FPS:%f\n",(float)(240000000/(ESP.getCycleCount()-time3)));
 
     
         xTaskNotifyGive(userTaskHandle);
@@ -900,7 +951,8 @@ void FastLEDshowTask2(void *pvParameters)
             
             replaceled();
             //delay(1),
-           FastLED.show();
+            //controller.showPixels(); 
+            FastLED.show();
             
                userTaskHandle=0; //so we can't have two display tasks at the same time
                  
@@ -1009,20 +1061,20 @@ CRGB fraise[11][10] = {
 int YO = 0;
 
 int cerise[196] = {
-  100, 100, 100, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 100,
-  100, 100, 0, 1, 1, 1, 1, 0, 100, 100, 100, 100, 100, 100,
-  100, 0, 1, 1, 2, 2, 1, 1, 0, 0, 0, 0, 100, 100,
-  100, 0, 1, 1, 1, 1, 2, 1, 0, 1, 1, 1, 0, 100,
-  100, 0, 1, 1, 1, 1, 1, 1, 0, 2, 2, 1, 1, 0,
-  100, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 2, 1, 0,
-  100, 100, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0,
-  100, 100, 100, 0, 0, 3, 0, 1, 1, 1, 1, 1, 1, 0,
-  100, 100, 100, 0, 3, 0, 100, 0, 1, 1, 1, 1, 0, 100,
-  100, 100, 0, 3, 0, 0, 0, 3, 0, 0, 0, 0, 100, 100,
-  100, 0, 0, 3, 0, 3, 3, 0, 100, 100, 100, 100, 100, 100,
-  0, 3, 3, 3, 3, 0, 0, 100, 100, 100, 100, 100, 100, 100,
-  0, 3, 3, 0, 0, 100, 100, 100, 100, 100, 100, 100, 100, 100,
-  100, 0, 0, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100
+  100, 100, 100, 4, 4, 4, 4, 100, 100, 100, 100, 100, 100, 100,
+  100, 100, 4, 1, 1, 1, 1, 4, 100, 100, 100, 100, 100, 100,
+  100, 4, 1, 1, 2, 2, 1, 1, 4, 4, 4, 4, 100, 100,
+  100, 4, 1, 1, 1, 1, 2, 1, 4, 1, 1, 1, 4, 100,
+  100, 4, 1, 1, 1, 1, 1, 1, 4, 2, 2, 1, 1, 4,
+  100, 4, 1, 1, 1, 1, 1, 1, 4, 1, 1, 2, 1, 4,
+  100, 100, 4, 1, 1, 1, 1, 4, 1, 1, 1, 1, 1, 4,
+  100, 100, 100, 4, 4, 3, 4, 1, 1, 1, 1, 1, 1, 4,
+  100, 100, 100, 4, 3, 4, 100, 0, 1, 1, 1, 1, 4, 100,
+  100, 100, 4, 3, 4, 4, 4, 3, 4, 4, 4, 4, 100, 100,
+  100, 4, 4, 3, 4, 3, 3, 4, 100, 100, 100, 100, 100, 100,
+  4, 3, 3, 3, 3, 4, 4, 100, 100, 100, 100, 100, 100, 100,
+  4, 3, 3, 4, 4, 100, 100, 100, 100, 100, 100, 100, 100, 100,
+  100, 4, 4, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100
 };
 
 int mario[238]={
@@ -1042,12 +1094,79 @@ int mario[238]={
   100,100,100,100,100,1,1,1,1,1,100,100,5,5,5,100,100            
 };
 
+int marioxmas[19*27]={
+
+  0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,0,
+  0,0,0,1,1,1,1,2,1,1,1,0,0,0,1,1,1,1,1,
+  0,0,0,1,1,1,2,2,2,2,2,1,1,1,1,1,1,1,1,
+  0,0,0,1,1,1,2,2,2,2,2,2,2,2,2,1,1,1,1,
+  0,0,0,0,1,1,1,1,1,1,1,2,2,2,2,1,1,1,1,
+  0,0,0,0,0,1,1,3,3,3,1,1,4,4,4,4,1,1,1,
+  0,0,0,0,1,1,3,3,3,3,3,1,2,2,2,2,2,1,0,
+  0,0,0,1,4,1,3,3,3,3,3,1,2,2,2,2,2,1,0,
+  0,0,0,1,2,4,1,3,3,3,1,2,2,2,4,2,1,0,0,
+  0,0,0,1,2,2,4,1,1,1,2,2,2,4,4,1,1,0,0,
+  0,0,0,0,1,2,2,2,2,2,2,4,4,4,4,1,0,0,0, 
+  0,0,0,0,0,1,2,2,2,1,1,4,4,4,4,2,1,0,0,
+  0,0,0,0,0,0,1,1,1,3,4,4,4,4,4,4,2,1,0,
+  0,0,0,0,0,1,1,3,4,4,4,1,1,1,1,1,4,1,0,
+  0,0,0,0,1,3,3,4,4,1,1,1,1,3,3,1,4,1,0,
+  0,0,0,1,3,3,3,1,3,3,1,3,3,3,3,3,1,2,1,
+  0,0,0,1,3,3,1,1,1,3,3,3,3,3,3,3,1,2,1,
+  0,1,0,0,1,3,1,1,3,3,3,1,3,1,3,1,2,2,1,
+  1,4,1,0,1,1,1,1,3,3,3,1,3,1,3,1,4,4,1,
+  0,1,2,1,1,1,4,1,1,3,3,4,3,4,3,1,1,1,0,
+  0,0,1,2,2,2,2,4,4,1,1,1,1,1,1,1,1,3,1,
+  0,0,0,1,2,2,2,2,2,4,1,1,1,1,1,1,3,3,1,
+  0,0,0,0,1,1,2,2,2,2,4,4,4,4,1,3,3,3,1,
+  0,0,0,0,0,1,1,2,2,2,2,2,2,1,1,3,3,3,1,
+  0,0,0,0,0,0,1,2,2,2,2,2,1,1,0,1,1,1,0,  
+  0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,
+      
+  
+};
 
 
+int toad[16*27]={
+  0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,
+  0,1,2,2,2,2,1,2,2,2,2,2,1,0,0,0,
+  0,0,1,2,2,2,1,1,2,2,1,1,1,0,0,0,
+  0,0,0,1,3,3,3,1,3,3,3,3,1,0,0,0,
+  0,1,1,1,3,3,1,3,3,3,1,1,1,1,1,0,
+  1,4,1,5,1,3,3,3,3,1,5,5,1,4,4,1,
+  1,4,1,5,1,1,1,1,1,5,5,5,1,4,4,1,
+  1,4,1,5,1,4,4,4,1,5,5,1,4,4,1,0,
+  0,1,4,1,5,1,4,4,1,5,5,1,4,4,1,0,
+  0,0,1,1,5,1,4,4,1,5,1,4,4,1,0,0,
+  0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,
+  0,0,0,1,4,4,4,4,4,4,4,4,1,0,0,0,
+  0,0,1,4,4,1,1,1,1,4,4,4,1,1,0,0,
+  0,0,1,4,4,4,4,4,4,4,4,4,1,3,1,0,
+  0,1,1,4,4,1,4,4,1,4,4,4,1,3,1,0,
+  1,3,1,4,4,1,4,4,1,4,4,1,3,3,3,1,
+  1,3,3,1,1,1,4,4,1,1,1,3,3,3,6,1,
+  1,6,3,3,3,1,1,1,1,3,3,3,3,6,6,1,
+  1,6,6,3,3,3,3,3,3,3,3,3,3,6,6,1,
+  1,6,6,3,3,3,6,6,6,3,3,3,3,6,6,1,
+  1,6,3,3,3,6,6,6,6,6,3,3,3,6,1,0,
+  0,1,3,3,3,6,6,6,6,6,3,3,3,3,1,0,
+  0,1,3,3,3,6,6,6,6,6,3,3,3,1,0,0,
+  0,0,1,3,3,3,6,6,6,3,3,3,1,0,0,0,
+  0,0,0,1,1,3,3,3,3,3,1,1,0,0,0,0,
+  0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,
+};
 
-CRGB palec[4] = {CRGB::Black, CRGB::Red, CRGB::White, CRGB::Green};
+CRGB toadpic[16*27];
+CRGB marioxmaspic[19*27];
+
+CRGB marioxmaspic2[19*27];
+
+CRGB palmarioxmas[7]={CRGB::Black,CRGB::Black,CRGB:: Red,CRGB(238,151,64),CRGB::White};
+CRGB palmarioxmas2[7]={CRGB::Black,CRGB::Black,CRGB:: Green,CRGB(238,151,64),CRGB::White};
+CRGB palec[5] = {CRGB::Black, CRGB::Red, CRGB::White, CRGB::Green,CRGB::Black};
 CRGB palpacman[2]={CRGB::Black,CRGB::Yellow};
-
+CRGB toadpal[7]={CRGB::Black,CRGB::Black,CRGB(90,58,34),CRGB::White,CRGB(238,151,64),CRGB::Blue,CRGB::Red};
 CRGB palm[7]={CRGB:: Red,CRGB::Red, CRGB::Blue,CRGB(98,65,7),CRGB::Yellow,CRGB(238,151,64),CRGB::Black};
 CRGB pall[7]={CRGB:: Red,CRGB::Green, CRGB::Blue,CRGB(98,65,7),CRGB::Yellow,CRGB(238,151,64),CRGB::Black};
 
@@ -1142,7 +1261,7 @@ void gameOflife()
         for(byte j=0;j<LED_HEIGHT;j++)
         {
             if(newStatus(i,j))
-                Tpic[i+j*LED_WIDTH]=CHSV(hue,255,140);//CRGB::Red;
+                Tpic[i+j*LED_WIDTH]=CHSV(hue,255,255);//CRGB::Red;
             else
                 Tpic[i+j*LED_WIDTH]=bgColor;
         }
@@ -1472,11 +1591,11 @@ void putOrientation(CRGB *pic,int h,int w,int x0,int y0)
 void putOrientation2(CRGB *pic,int h,int w,int x0,int y0)
 {
     //CRGB * Tpic = (CRGB*)calloc(h*w,sizeof(CRGB));
-    if(!Tpic)
+    /*if(!Tpic)
     {
         Serial.println("pas possible");
         return ;//NULL;
-    }
+    }*/
     switch(tableOrientation){
             
         case DOWN_RIGHT: //on ne fait rien
@@ -1647,6 +1766,23 @@ void displaygif( CRGB *pica, long int x0, long int y0, long int h, long int w,lo
 
     free(bitmapRGB);  
 }
+
+void displaygifDouble( CRGB *pica, long int x0, long int y0, long int h, long int w,long pic)
+{
+
+ CRGB *bitmapRGB =(CRGB*)malloc(w*h*sizeof(CRGB)) ;
+    if(bitmapRGB==NULL)
+    {
+        Serial.println("immossibnle de créer l'image");
+        return;
+    }
+
+ memcpy ( bitmapRGB, pica+(h*w*pic), h*w*sizeof(CRGB) );
+ displayPicDouble( bitmapRGB, x0, y0,  h,  w);
+
+    free(bitmapRGB);  
+}
+
 
 
 void displaygifdir( CRGB *pica, long int x0, long int y0, long int h, long int w,long  pic,int direc)
@@ -1822,6 +1958,11 @@ void displaypic( CRGB *pica, long int x0, long int y0, long int h, long int w)
 void displayPicDouble(CRGB *pica, int x0, int y0, int h, int w)
 {
   CRGB *newpic=(CRGB*)malloc(4*h*w*sizeof(CRGB));
+  if(newpic==NULL)
+  {
+    Serial.println("impossible to create file");
+    return;
+  }
     for(int y = 0; y < h; y++)
         for(int x = 0; x < w; x++)
         {
@@ -2097,7 +2238,7 @@ void displaypic( CRGB *pica, int x0, int y0, int h, int w)
 
 void calculpic(int *pic, CRGB *palette, CRGB color, int h, int w,CRGB *result)
 {
-  Serial.println("on est là");
+  //Serial.println("on est là");
   int to = h * w;
  // static CRGB result[296];
   /*for (int m = 0; m < h; m++)
@@ -2133,6 +2274,11 @@ void calculpic(int *pic, CRGB *palette, CRGB color, int h, int w,CRGB *result)
 
       }
       if (pic[i] == 9)
+      {
+        result[i] = color;
+
+      }
+       if (pic[i] == 0)
       {
         result[i] = color;
 
@@ -2234,7 +2380,7 @@ void calculfraise(CRGB color)
 void fill(CRGB color)
 {
      fill_solid(leds, NUM_LEDS, color);
-    fill_solid(Tpic, NUM_LEDS, color);
+    //fill_solid(Tpic, NUM_LEDS, color);
 }
 
 #include "barpc.h"
@@ -2424,7 +2570,7 @@ void initServer()
 server.on("/anim", HTTP_GET, [] {
   int newanim;
         //fill_solid(leds, NUM_LEDS, solidColor);
-        //FastLED.show();
+        // controller.showPixels(); //FastlLed.show()
         Serial.println("anim");
         String g=server.arg("v");
         Serial.println(g);
@@ -2435,11 +2581,15 @@ server.on("/anim", HTTP_GET, [] {
         sscanf ((const char*)m,"%d",&newanim);*/
          Serial.printf("new anim:%s\n",g);
         Serial.printf("new anim:%d\n",newanim);
-         newanim=newanim%13;
+         //fnewanim=newanim%13;
          if (anim==7)
      {
            timerAlarmDisable(timer);
           inGame=false;
+     }
+     if (anim==55)
+     {
+           free(vortexs);
      }
          if(anim==0)
          {
@@ -2450,11 +2600,58 @@ server.on("/anim", HTTP_GET, [] {
          artnet.stop();
           
          }
+         
+         if(anim==4)
+         {
+          free(Tpic);
+         }
+        
+        
+         if(anim==63)
+        {
+          free(readbuffer);
+        }
+        
         if( anim==5)
         {
             Udp2.stop();
             free(artnetPacket2);
-            }
+            free(Tpic);
+         }
+         if(newanim==4)
+         {
+          if(Tpic!=NULL)
+            free(Tpic);
+           Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
+         }
+          if(newanim==63)
+         {
+            if(readbuffer!=NULL)
+            free(readbuffer);
+          readbuffer=(uint8_t*)malloc(NUM_LEDS*sizeof(CRGB));
+         }
+          if(newanim==5)
+         {
+          if(Tpic!=NULL)
+            free(Tpic);
+          Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
+          if(Tpic==NULL)
+           Serial.println("no more memory");
+           else
+           Serial.println("TPIC Creé");
+           
+         }
+              if (newanim==55)
+     {
+      
+           vortexs=(struct vtx*)malloc(NUM_SNAKES*sizeof(struct vtx));
+           vtx d;
+           for(int i=0;i<NUM_SNAKES;i++)
+           {
+            vortexs[i]=d;
+           }
+           vortexsStarted = 1;
+     }
             anim=newanim;
          firsttime=true;
               server.send ( 200, "text/plain", "this works as well" );
@@ -2463,9 +2660,35 @@ server.on("/anim", HTTP_GET, [] {
     });
 
 
+server.on("/b", HTTP_GET, [] {
+  int b;
+  String g=server.arg("r");
+        Serial.println(g);
+        b=atoi(g.c_str());
+      setTableBrightness(b%256);
+   });
 
 
 
+server.on("/gr", HTTP_GET, [] {
+  int b;
+  String g=server.arg("r");
+        Serial.println(g);
+        gammaCorrectionr=(float)atoi(g.c_str())/10;
+        Serial.printf("gr :%f\n",gammaCorrectionr);
+      calculateGammaTable();
+   });
+
+  server.on("/gb", HTTP_GET, [] {
+  int b;
+  String g=server.arg("r");
+        Serial.println(g);
+        gammaCorrection=(float)atoi(g.c_str())/10;
+        Serial.printf("gb :%f\n",gammaCorrection);
+      calculateGammaTable();
+   }); 
+
+   
 server.on("/restart",HTTP_GET, [] {
   ESP.restart();
 });
@@ -2473,7 +2696,7 @@ server.on("/restart",HTTP_GET, [] {
     
       server.on("/changetext", HTTP_GET, []() {
         //fill_solid(leds, NUM_LEDS, solidColor);
-        //FastLED.show();
+        // controller.showPixels(); //FastlLed.show()
         
      String g = server.arg("v");
         Serial.println(g);
@@ -2485,16 +2708,19 @@ server.on("/restart",HTTP_GET, [] {
         g.toCharArray(mess, lens+1);
         //Serial.println(lens);
         //fill_solid(leds, NUM_LEDS, bgColor);
-       // FastLED.show();
+       //  controller.showPixels(); //FastlLed.show()
         server.send(200, "text/html", "done");
         // i=0;
     });
 
 
+
+
+
     
     server.on("/up", HTTP_GET, [] {
         //fill_solid(leds, NUM_LEDS, solidColor);
-        //FastLED.show();
+        // controller.showPixels(); //FastlLed.show()
          Serial.printf("hhh");
         //String g = server.arg("v");
               tableOrientation=(tableOrientation+1)%8;
@@ -2504,7 +2730,7 @@ server.on("/restart",HTTP_GET, [] {
     });
     server.on("/down", HTTP_GET, [] {
         //fill_solid(leds, NUM_LEDS, solidColor);
-        //FastLED.show();
+        // controller.showPixels(); //FastlLed.show()
         Serial.printf("hhh");
         //String g = server.arg("v");
         tableOrientation=abs((tableOrientation-1))%8;
@@ -2522,8 +2748,8 @@ server.on("/restart",HTTP_GET, [] {
 }
 
 
-uint8_t *readbuffer;
-char filename[256];
+//uint8_t *readbuffer;
+//char filename[256];
 
   uint32_t syncmax1=0;
   uint32_t syncmax2=0;
@@ -2532,20 +2758,46 @@ void setup() {
    Serial.println("ee");
    pinMode(27, OUTPUT);
    digitalWrite(27,HIGH);
-  String g="message depart";
+  String g="BIENVENU ET JOYEUX ANNIVERSAIRE ADAM";
+  
  
   g.toCharArray(mess, g.length()+1);
-  anim=1;
+
+//mess[10]=13;
+  
+  anim=3;
   xTaskCreatePinnedToCore(FastLEDshowTask, "FastLEDshowTask", 2000, NULL,2, &FastLEDshowTaskHandle, FASTLED_SHOW_CORE);
   xTaskCreatePinnedToCore(FastLEDshowTask2, "FastLEDshowTask2", 2000, NULL,3, &FastLEDshowTaskHandle2, FASTLED_SHOW_CORE);
  
   calculatecos();
+  FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, 0, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, 2 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN4, COLOR_ORDER>(leds, 3 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+
+        FastLED.addLeds<LED_TYPE, LED_PIN5, COLOR_ORDER>(leds, 4 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN6, COLOR_ORDER>(leds, 5 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN7, COLOR_ORDER>(leds, 6 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN8, COLOR_ORDER>(leds, 7 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+
+        FastLED.addLeds<LED_TYPE, LED_PIN9, COLOR_ORDER>(leds, 8 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN10, COLOR_ORDER>(leds, 9 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN11, COLOR_ORDER>(leds, 10 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN12, COLOR_ORDER>(leds, 11 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+
+        FastLED.addLeds<LED_TYPE, LED_PIN13, COLOR_ORDER>(leds, 12 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN14, COLOR_ORDER>(leds, 13 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN15, COLOR_ORDER>(leds, 14 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        FastLED.addLeds<LED_TYPE, LED_PIN16, COLOR_ORDER>(leds, 15 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
   // LEDS.addLeds<WS2812_PORTA,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
   // LEDS.addLeds<WS2811_PORTB,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
-  // LEDS.addLeds<WS2811_PORTD,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP).setCorrection(TypicalLEDStrip);
+  // LEDS.addLeds<WS2811_PORTD,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
 
 //Serial.printf("mask %lu\n",PINS_MASK);
-  FastLED.addLeds<WS2811_PORTA,NUM_STRIPS,PORT_MASK>(leds, NUM_LEDS_PER_STRIP);
+  //FastLED.addLeds<WS2811_PORTA,NUM_STRIPS,PORT_MASK>(leds, NUM_LEDS_PER_STRIP);
+  
+//controller.initled(leds,Pins,NUM_STRIPS,NUM_LEDS_PER_STRIP);
+
  //FastLED.addLeds<WS2811_PORTA,NUM_STRIPS,0>(leds, NUM_LEDS_PER_STRIP);
 // FastLED.addLeds<APA102>(leds, NUM_LEDS);
  //FastLED.addLeds<APA102, 3,12, RGB>(leds, NUM_LEDS_PER_STRIP);
@@ -2559,9 +2811,14 @@ void setup() {
   // tell FastLED there's 60 NEOPIXEL leds on pin 12, starting at index 120 in the led array
   //FastLED.addLeds<NEOPIXEL, 14>(leds, 2 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
   //FastLED.setBrightness(32);
+  Serial.println(ESP.getFreeHeap());
+  //Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
+  //readbuffer=(uint8_t*)malloc(NUM_LEDS*sizeof(CRGB));
+  Serial.println(ESP.getFreeHeap());
 setTableBrightness(64);
   fill(CRGB::Black);
-  FastLED.show();
+   //controller.showPixels(); 
+   FastLED.show();
   FastLED.delay(2000);
   
     Color=CRGB(255,0,0);
@@ -2569,12 +2826,12 @@ setTableBrightness(64);
 FastLEDshowESP32();
 //delay(1000);
     fill(CRGB(0, 0, 255));
-//FastLED.show();
+// controller.showPixels(); //FastlLed.show()
 FastLEDshowESP32();
-//FastLED.show();
+// controller.showPixels(); //FastlLed.show()
     afficheMessage("INIT",5,5);
     FastLEDshowESP32();
-   //   FastLED.show();
+   //    controller.showPixels(); //FastlLed.show()
      //show();
       FastLED.delay(20 );
   // delay(1000);
@@ -2583,10 +2840,11 @@ FastLEDshowESP32();
   calculfraise(solidColor);
   calculpic(cerise, palec, solidColor, 14, 14,cerisecalc);
    calculpic(mario, palm, solidColor, 14, 17,mariocalc);
-     
+    calculpic(marioxmas, palmarioxmas, solidColor, 19, 27,marioxmaspic);
+     calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
   calculpic(mario, pall, bgColor, 14, 17, luigicalc);
   bgColor=CRGB::Black;
-   calculpic(pacmab, palpacman, CRGB(0,0,0),32,8,pacmancalc);
+   calculpic(pacmab, palpacman, solidColor,32,8,pacmancalc);
    
    Serial.printf("taille pacman :%d",sizeof(pacmancalc));
 calculpic(ghostp, palghost, CRGB(0,0,0), 8, 9,ghostpc);
@@ -2600,7 +2858,7 @@ static uint8_t buf[2500];
     Serial.printf("Connecting ");
     WiFi.begin("WiFi-2.4-E19C", "yvesyves");
 //WiFi.begin("DomainePutterie", "Jeremyyves");
-int retrywifi=0;
+int retrywifi=0; 
     while (WiFi.status() != WL_CONNECTED && (retrywifi<40)) {
       Serial.println(WiFi.status());
    
@@ -2626,7 +2884,12 @@ int retrywifi=0;
     Serial.println("WiFi connected.");
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
-    
+    if(WiFi.localIP()==INADDR_NONE)
+      {
+         //afficheMessage(WiFi.localIP(),0,5);
+         delay(2000);
+         ESP.restart();
+      }
       /* if (!MDNS.begin("esp32")) {
         Serial.println("Error setting up MDNS responder!");
         while(1) {
@@ -2638,7 +2901,8 @@ int retrywifi=0;
          SPIFFS.begin();
    
 
-/*
+    initServer();
+     server.begin();
 SPI.begin(33,35,32,27);
     
     if(!SD.begin(27,SPI,80000000)){
@@ -2662,15 +2926,14 @@ SPI.begin(33,35,32,27);
        if(!myFile)
           Serial.println("no file found");
     }
-*/
+
     //initTetris();
-    initServer();
-     server.begin();
+
      //webSocket.begin();
     //webSocket.onEvent(webSocketEvent);
     //initTetrisScoketControl();
        fill(CRGB(10, 10, 10));
-       // FastLED.show();
+       //  controller.showPixels(); //FastlLed.show()
  //artnet.setframe((CRGB*)malloc(48*64*sizeof(CRGB))) ;
           
            //MDNS.addService("http", "tcp", 80);
@@ -2690,16 +2953,16 @@ SPI.begin(33,35,32,27);
     afficheMessage("DONE",0,0);
      FastLEDshowESP32();
     // FastLEDshowESP32();
-    // FastLED.show();
+    //  controller.showPixels(); //FastlLed.show()
      //FastLED.delay(2000);
      fill(CRGB(10, 10, 10));
 
       FastLEDshowESP32();
-     //FastLED.show();
+     // controller.showPixels(); //FastlLed.show()
      
      Serial.printf("ful\n");
   //fill(CRGB(0, 0, 0));
-    // FastLED.show();
+    //  controller.showPixels(); //FastlLed.show()
      k=0;
     // newGame();
 int nbNeededUniverses=24;
@@ -2769,6 +3032,43 @@ void loop() {
 switch (anim)
 {
 
+case 55:
+
+{
+  disp=false; 
+  replaceled();
+  vortex();
+  replaceled();
+  FastLEDshowESP32();
+}
+break;
+
+
+
+case 63:
+{
+  disp=false;
+  if (myFile.available())
+  {
+   // Serial.println("ee");
+    myFile.read(readbuffer,NUM_LEDS*sizeof(CRGB));
+    memcpy(leds,readbuffer,NUM_LEDS*sizeof(CRGB));
+    replaceled();
+    Serial.println("Reading Frame");
+    FastLEDshowESP32();
+   //      controller.showPixels(); //FastlLed.show()
+    
+       //  controller.showPixels(); //FastlLed.show()
+    delay(10); //this is to be changed to adapt the replay
+  }
+  else
+  {
+    myFile.seek(0);
+  }
+}
+break;
+
+
 case 5:
 {
 
@@ -2780,7 +3080,7 @@ case 5:
     afficheMessage("READY TO STREAM", 1, 20);
     replaceled();
     FastLEDshowESP32();
-    FastLEDshowESP32();
+  //  FastLEDshowESP32();
     Udp2.begin(100);
      artnetPacket2=(char*)malloc((123*3*2+1)*sizeof(char));
      if(artnetPacket2==NULL)
@@ -2807,15 +3107,17 @@ int packetSize = Udp2.parsePacket();
        //Serial.printf("size:%d\n",packetSize);
         firstpacket=true;
       Udp2.read(artnetPacket2, packetSize);
-      memcpy(&Tpic[123*2*(artnetPacket2[0])],artnetPacket2 + 1,123*3*2);
+     // memcpy(&Tpic[123*2*(artnetPacket2[0])],artnetPacket2 + 1,123*3*2);
      //Serial.printf("univers:%d\n",artnetPacket2[0]);
       if(artnetPacket2[0]==255)
       {
         Serial.printf("new value bru:%d\n",artnetPacket2[1]);
-        FastLED.setBrightness(artnetPacket2[1]);
+       setTableBrightness(artnetPacket2[1]);
       }
       else
       {
+       //Serial.printf("Univers %d\n",artnetPacket2[0]);
+        memcpy(&Tpic[123*2*(artnetPacket2[0])],artnetPacket2 + 1,123*3*2);
             if (artnetPacket2[0]==0)
             {
               sync=1;
@@ -2841,7 +3143,10 @@ int packetSize = Udp2.parsePacket();
     }
  }
  if(firstpacket)
- FastLEDshowESP322();
+ {
+ FastLEDshowESP32();
+ //delay(1);
+ }
 }
 
   break;
@@ -2855,7 +3160,7 @@ case 11:
    
     replaceled();
     FastLEDshowESP32();
-    FastLEDshowESP32();
+   // FastLEDshowESP32();
      delay(2000);
     newSnake();
     firsttime=false;
@@ -2879,15 +3184,19 @@ break;
     firsttime=false;
     fill(bgColor);
     afficheMessage("READY FOR ARTNET", 1, 20);
-     artnet.begin(123*48,170,1);
-    //artnet.begin(123*10,123,1);
+    //controller.setBrightness(255);
+     //artnet.begin(123*48,170,1);
+    artnet.begin(123*48,170,1);
     replaceled();
     FastLEDshowESP32();
-    FastLEDshowESP32();
+    //FastLEDshowESP32();
   }
     disp=false;
   if(artnet.read()==1)
+  {
+    Serial.println("on display");
       FastLEDshowESP322();
+  }
                //xTaskNotifyGive(FastLEDshowTaskHandle2);
              artnet.resetsync();
              // Serial.println("on affiche");
@@ -2900,6 +3209,8 @@ case 1:
 {
    if(firsttime)
  {
+  dire=1;
+  r=1;
   setTableBrightness(64);
   firsttime=false;
  }
@@ -2953,8 +3264,10 @@ case 2:
 {
    if(firsttime)
  {
-  setTableBrightness(64);
+  setTableBrightness(32);
   firsttime=false;
+  dire=1;
+  r=0;
  }
             // k=k+15;
       disp=true;
@@ -3016,6 +3329,153 @@ fill(bgColor);
 break;
 
 
+case 57:
+{
+  int rayon=3;
+  if(firsttime)
+  {
+    r=0;
+    firsttime=false;
+    fill(CRGB::Black);
+    disp=true;
+    
+  }
+  replaceled();
+
+fadeToBlackBy(leds, (LED_WIDTH * LED_HEIGHT), 20);
+float ab=(float)r*2*PI/720;
+circleFilled(LED_WIDTH*(sin(5*ab)+1)/2,LED_HEIGHT*(sin(3*ab)+1)/2,rayon,CHSV(r%255,255,255));
+circleFilled(LED_WIDTH*(sin(5*ab)+1)/2,LED_HEIGHT*(sin(7*ab)+1)/2,rayon,CHSV((r+180)%255,255,255));
+circleFilled(LED_WIDTH*(sin(4*ab)+1)/2,LED_HEIGHT*(sin(9*ab)+1)/2,rayon,CHSV((r+60)%255,255,255));
+circleFilled(LED_WIDTH*(sin(7*ab)+1)/2,LED_HEIGHT*(sin(3*ab)+1)/2,rayon,CHSV((r+120)%255,255,255));
+circleFilled(LED_WIDTH*(sin(2*ab)+1)/2,LED_HEIGHT*(sin(7*ab)+1)/2,rayon,CHSV((r+30)%255,255,255));
+circleFilled(LED_WIDTH*(sin(11*ab)+1)/2,LED_HEIGHT*(sin(4*ab)+1)/2,rayon,CHSV((r+80)%255,255,255));
+circleFilled(LED_WIDTH*(sin(1*ab)+1)/2,LED_HEIGHT*(sin(7*ab)+1)/2,rayon,CHSV((r+30)%255,255,255));
+circleFilled(LED_WIDTH*(sin(10*ab)+1)/2,LED_HEIGHT*(sin(11*ab)+1)/2,rayon,CHSV((r+70)%255,255,255));
+//float dc=;
+//Serial.printf("gg:%f  %f\n",ab,dc);
+  replaceled();
+r=(r+1)%10000000;
+}
+break;
+
+case 56:
+{
+  if(firsttime)
+{
+  firsttime=false;
+  fill(CRGB::Black);
+  disp=true;
+}
+
+
+  int rayon=random(20);
+  int xx=random(122);
+  int yy=random(48);
+  int colorr=random(255);
+  replaceled();
+
+fadeToBlackBy(leds, (LED_WIDTH * LED_HEIGHT), 5);
+circleFilledBoard(xx,yy,rayon,CHSV(colorr,255,255),CHSV(colorr,255,200));
+  replaceled();
+  
+}
+break;
+
+case 58:
+{
+  if(firsttime)
+  {
+    firsttime=false;
+    fill(CRGB::Black);
+    r=0;
+    disp=true;
+    
+  }
+  float ab=(float)(r/10)*2*PI/720;
+ int offx=-LED_WIDTH*(sin(3*ab)+1)/2;
+ int offy=-LED_HEIGHT*(sin(10*ab)+1)/2;
+ for(int x1=1;x1<LED_WIDTH-1;x1++)
+    for(int y1=0;y1<LED_HEIGHT;y1++)
+    {
+          int x=x1+offx;
+      int y=y1+offy;
+     // int coloor=(128.0 + (128.0 * sin16(10*((double)(x1) / 360)*2*PI))+ 128.0 + (128.0 *sin16(10*((double)(y1) / 360.0)*2*PI))) / 2;
+     int coloor=(sin8((double)(x)*8 )+ sin8((double)(y)*8)) / 2;
+     //Serial.println(coloor);
+     PixelOn(x1,y1,CHSV((coloor+r)%256,255,255));
+
+    }
+     replaceled();
+      r=r+5;
+      
+}
+break;
+
+
+case 59:
+{
+  if(firsttime)
+  {
+    firsttime=false;
+    fill(CRGB::Black);
+    r=0;
+    disp=true;
+    
+  }
+
+ for(int x1=1;x1<LED_WIDTH-1;x1++)
+    for(int y1=0;y1<LED_HEIGHT;y1++)
+    {
+      //int coloor=(128.0 + (128.0 * sin(10*((double)(x1) / 360)*2*PI))+ 128.0 + (128.0 *sin(10*((double)(y1) / 360.0)*2*PI))) / 2;
+     int coloor= int(sin8(sqrt(((x1-(triwave8(r/5) + LED_WIDTH) / 2.0) * (x1-(triwave8(r/5) + LED_WIDTH) / 2.0) + (y1 - LED_HEIGHT / 2.0) * (y1 - LED_HEIGHT / 2.0)) )*5));
+     PixelOn(x1,y1,CHSV((coloor+r)%256,255,255));
+
+    }
+     replaceled();
+      r=r+5;
+      
+}
+break;
+
+
+
+case 60:
+{
+  if(firsttime)
+  {
+    firsttime=false;
+    fill(CRGB::Black);
+    r=0;
+    disp=true;
+    
+  }
+  float ab=(float)(r/10)*2*PI/720;
+ int offx=-LED_WIDTH*(sin(3*ab)+1)/2;
+ int offy=-LED_HEIGHT*(sin(10*ab)+1)/2;
+ for(int x1=1;x1<LED_WIDTH-1;x1++)
+    for(int y1=0;y1<LED_HEIGHT;y1++)
+    {
+      int x=x1+offx;
+      int y=y1+offy;
+      //int coloor=(128.0 + (128.0 * sin(10*((double)(x1) / 360)*2*PI))+ 128.0 + (128.0 *sin(10*((double)(y1) / 360.0)*2*PI))) / 2;
+     int coloor= 
+    (
+        sin8(x * 9.0)
+     + sin8(y *5.0)
+      + sin8((x + y) *10.0)
+      + sin8(sqrt(double(x * x + y * y)) * 6.0)
+    ) / 4;
+     PixelOn(x1,y1,CHSV((coloor+r)%256,255,255));
+
+    }
+     replaceled();
+      r=r+5;
+      
+}
+break;
+
+
 case 12:
 {disp=true;
    displayBitmapFromProgmem(mariomap,-k%1720+120,0,48,860);
@@ -3032,13 +3492,16 @@ case 3:
  }   
         disp=true;
 bgColor=CRGB(10,10,10);
-int f=110+30+260+10+30+120+70+20;
+int f=110+30+260+10+30+120+70+20+70+180+40;
 fill(bgColor);
+offset+=10;
 // displayBitmapFromProgmem(mariomap,-k%1500+30,YO+r,40,703);
  // displayBitmapFromProgmem(mariomap ,0,YO,40,792);
 for(int l=0 ;l<1;l++)
 {
+  offset-=10;
     Y1=0;
+   /* 
     displayPicDouble(cerisecalc, -k%f+ offset -20,cos_table[(int)(k/2)%LED_WIDTH], 14, 14);
     displayPicNewInv(fraiseCalc, -k%f+ offset + 14 , Y1 + 2, 11, 10);
     displayPicNewInv(ghostred, -k%f + offset + 30, Y1, 14, 14);
@@ -3047,24 +3510,116 @@ for(int l=0 ;l<1;l++)
     displayPicNewInv(ghostPurple, -k%f + offset +78, Y1, 14, 14);
     displayPicNewInv(ghostCyan, -k%f + offset + 94, Y1, 14, 14);
     displayPicNewInv(mariocalc, -k%f + offset+110 , Y1, 14, 17);
-   displaygif(pacmancalc,-k%f+offset+110+30,0,8,8,(k/7) %4);
+    offset+=10;
+  displayPicNewInv(marioxmaspic2,-k%f+offset+110+30+45,10,27,19);
+   offset+=50;
     displaygif(pacmancalc,-k%f+offset+110+30+50,9,8,8,(k/7) %4);
       displaygif(pacmancalc,-k%f+offset+110+30+100,9,8,8,(k/5) %4);
         displaygif(pacmancalc,-k%f+offset+110+30+150,9,8,8,(k/7) %4);
           displaygif(pacmancalc,-k%f+offset+110+30+200,9,8,8,(k/5) %4);
-            afficheMessage(mess, -k%f+ offset + 110+40, 30);
-   afficheMessage2(mess, -k%f+ offset + 110+40, 0);
-     displaygif(pacmancalc,-k%f+offset+110+30+250,0,8,8,(k/5) %4);
-      displaygif(pacmancalc,-k%f+offset+110+30+260,0,8,8,(k/5) %4);
+
+          
+            afficheMessage(mess, -k%f+ offset + 110+40+5, 30);
+   afficheMessage2(mess, -k%f+ offset + 110+40+5, 0);
+     displaygif(pacmancalc,-k%f+offset+110+30+250,15,8,8,(k/5) %4);
+      displaygif(pacmancalc,-k%f+offset+110+30+260,15,8,8,(k/5) %4);
+      */
   //displayPicNewInv(mariocalc, -k%f+offset+110+30+260+10 , Y1, 14, 17);
 Y1=Y1+14;
 // displayPicNewInv(ghostgreen, -k%f + offset + 62+10, Y1, 14, 14);
-    displayPicNewInv(ghostPurple, -k%f + offset +78+10, Y1, 14, 14);
-    displayPicDouble(ghostCyan, -k%f + offset + 94+10, 19,14,14);//cos_table[k%LED_WIDTH] , 14, 17);
-displayPicDouble(luigicalc, -k%f + offset+110+30+260+10+30,13,14,17);//cos_table[(int)(2*(k+10)/3)%LED_WIDTH] , 14, 17);
-   displaygif(pacmancalc,-k%f+offset+110+30+10,cos_table[(10+k)%LED_WIDTH],8,8,(k/7) %4);
-    displaygif(pacmancalc,-k%f+offset+110+30+50+10,14,8,8,(k/7) %4);
+   // displayPicNewInv(ghostPurple, -k%f + offset +78+10, Y1, 14, 14);
+   // displayPicDouble(ghostCyan, -k%f + offset + 94+10, 19,14,14);//cos_table[k%LED_WIDTH] , 14, 17);
+displayPicDouble(toadpic, -k%f + offset,-2,27,16);//cos_table[(int)(2*(k+10)/3)%LED_WIDTH] , 14, 17);
+  // displaygif(pacmancalc,-k%f+offset+110+30+10,cos_table[(10+k)%LED_WIDTH],8,8,(k/7) %4);
+   // displaygif(pacmancalc,-k%f+offset+110+30+50+10,14,8,8,(k/7) %4);
+   int maxm=15;
+for(int j=0;j<maxm;j++)
+{
+  if ((-k%f + offset+50+25*j<LED_WIDTH )and (-k%f + offset+50+25*j>-25))
+  {
+  palmarioxmas2[2]=CHSV(j*256/maxm,254,255);
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+    displayPicNewInv(marioxmaspic2,-k%f + offset+50+25*j,cos_table[(int)(11*(k+10*j)/20)%LED_WIDTH]/2+15,27,19);  
+  }
+  
 }
+int offset2=offset+maxm*25;
+for(int j=0;j<maxm;j++)
+{
+  if ((-k%f + offset2+50+25*j<LED_WIDTH )and (-k%f + offset2+50+25*j>-25))
+  {
+    toadpal[5]=CHSV(j*256/maxm,254,255);
+    toadpal[6]=CHSV((j*256/maxm)+40,254,255);
+         calculpic(toad, toadpal, solidColor, 16, 27,toadpic); 
+        displayPicNew(toadpic,-k%f + offset2+50+25*j,cos_table[(int)(11*(k+10*(maxm+j))/20)%LED_WIDTH]/2+7,27,16); 
+  }
+}
+ afficheMessage(mess, -k%f+ offset+50,8);
+/*
+palmarioxmas2[2]=CRGB::Green;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45,cos_table[(int)(11*(k+10)/20)%LED_WIDTH]/2,27,19);  
+
+palmarioxmas2[2]=CRGB::Purple;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25,cos_table[(int)(11*(k+20)/20)%LED_WIDTH]/2,27,19);  
+
+
+palmarioxmas2[2]=CRGB::Cyan;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25,cos_table[(int)(11*(k+30)/20)%LED_WIDTH]/2,27,19); 
+  
+
+palmarioxmas2[2]=CRGB::Yellow;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25+25,cos_table[(int)(11*(k+40)/20)%LED_WIDTH]/2,27,19); 
+
+palmarioxmas2[2]=CRGB::Red;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25+25+25,cos_table[(int)(11*(k+50)/20)%LED_WIDTH]/2,27,19); 
+
+
+palmarioxmas2[2]=CRGB(80,80,80);
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25+25+25+25,cos_table[(int)(11*(k+60)/20)%LED_WIDTH]/2,27,19); 
+
+offset=offset+25+25+25+25+25+25;
+int d=60;
+palmarioxmas2[2]=CRGB::Green;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45,cos_table[(int)(11*(k+10+d)/20)%LED_WIDTH]/2,27,19);  
+
+palmarioxmas2[2]=CRGB::Purple;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25,cos_table[(int)(11*(k+20+d)/20)%LED_WIDTH]/2,27,19);  
+
+
+palmarioxmas2[2]=CRGB::Cyan;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25,cos_table[(int)(11*(k+30+d)/20)%LED_WIDTH]/2,27,19); 
+  
+
+palmarioxmas2[2]=CRGB::Yellow;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25+25,cos_table[(int)(11*(k+40+d)/20)%LED_WIDTH]/2,27,19); 
+
+palmarioxmas2[2]=CRGB::Red;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25+25+25,cos_table[(int)(11*(k+50+d)/20)%LED_WIDTH]/2,27,19); 
+
+
+palmarioxmas2[2]=CRGB(80,80,80);
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+  displayPicNewInv(marioxmaspic2,-k%f + offset+110+30+260+10+30+5+45+25+25+25+25+25,cos_table[(int)(11*(k+60+d)/20)%LED_WIDTH]/2,27,19); 
+
+
+  
+     
+palmarioxmas2[2]=CRGB::Green;
+    calculpic(marioxmas, palmarioxmas2, solidColor, 19, 27,marioxmaspic2); 
+    */
+}
+offset-=10;
 replaceled();
 }
 break;
@@ -3140,6 +3695,8 @@ case 4:
  {
   setTableBrightness(64);
   firsttime=false;
+  ongoing=false;
+  k=0;
  }
 //delay(200);
 bgColor=CRGB(4,4,4);
@@ -3171,14 +3728,14 @@ break;
               }
               if(k%(pas-1)==0)
               {
-                //FastLED.show();
+                // controller.showPixels(); //FastlLed.show()
                  FastLEDshowESP32();
                for(int g=0;g<5;g++)
                {
               
                 displayBitmapFromProgmem(mariomap,-k%1500+30,YO+r,40,703);
                    displayBitmapFromProgmem(mariomap3,-k%1500+30+703,YO+r,40,792);
-                 //  FastLED.show();
+                 //   controller.showPixels(); //FastlLed.show()
                   FastLEDshowESP32();
                r+=dire;
                }
@@ -3226,11 +3783,11 @@ case 6:
     disp=true;
  if(firsttime)
  {
-  setTableBrightness(64);
+  setTableBrightness(32);
   firsttime=false;
  }
- displayBitmapFromProgmem(paintingsLD[((int)(k/1000))%nbpaintings],0,0,48,123); 
-   // delay(4000);
+ displayBitmapFromProgmem(paintingsLD[((int)(k/1000))%nbpaintings],0,0,48,123); //5],0,0,48,123);//
+    delay(4);
     replaceled();
     // FastLEDshowESP32();
       //displayBitmapFromProgmem(pacboardfull,2,0,36*4,28*4);
@@ -3366,6 +3923,11 @@ case 9:
 }
 break;
 
+default:
+    fill(bgColor);
+    afficheMessage("WRONG NUMBER", 1, 20);
+    replaceled();
+break;
 
 }
 /*
@@ -3373,14 +3935,14 @@ break;
  */
      
 long time3=ESP.getCycleCount();
-//FastLED.show();
+// controller.showPixels(); //FastlLed.show()
   /* if( authdisplay)
     {
       timerStop(timer);
       FastLEDshowESP32();
        timerStart(timer);
       //delay(2);
-      authdisplay=false;
+      authƒdisplay=false;
       
     }*/
     if(disp)
