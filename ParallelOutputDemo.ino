@@ -27,11 +27,32 @@ bool isTable=true;
 //#define USE_SPI 1
 //#define FASTLED_ALLOW_INTERRUPTS 0
 //#define INTERRUPT_THRESHOLD 1
-#define ESP_I2S 1
-#define FASTLED_ESP32_I2S 1
+//#define ESP_I2S 1
+
+#define LED_WIDTH 123
+#define LED_HEIGHT_PER_STRIP 3
+#define LED_HEIGHT NUM_STRIPS*LED_HEIGHT_PER_STRIP
+#define NUM_LEDS NUM_STRIPS * NUM_LEDS_PER_STRIP
+#define NUM_LEDS_PER_STRIP LED_HEIGHT_PER_STRIP*LED_WIDTH
+
+
+#define ESP32_VIRTUAL_DRIVER true
+#define ESP_VIRTUAL_DRIVER_82_2 1
+#define NBIS2SERIALPINS 2
+//#define STATIC_COLOR_BGR 1
+#define STATIC_COLOR_PER_PIN 1
+#define COLOR_2_RGB 1
+//#define ESP32_VIRTUAL_DIVER true
+//#define NBIS2SERIALPINS 4
+//#define FASTLED_ESP32_I2S 1
 #include "FastLED.h"
 FASTLED_USING_NAMESPACE
 #define FASTLED_SHOW_CORE 0
+
+
+#define LATCH_PIN 13
+#define CLOCK_PIN 27
+
 #include "fontamstrad.h"
 int cos_table[123];
 #define USE_SERIAL Serial
@@ -49,7 +70,7 @@ char READ_NAME[]="savedata2"; //the name of your save
 //#include "I2S.h"
 #endif
     
-int Pins[16]={2,4,5,12,13,14,15,16,17,18,19,21,22,23,25,26};
+int Pins[16]={12,14};
 #ifndef ESP_I2S
 //I2S controller(0);
 #endif
@@ -89,11 +110,7 @@ WiFiUDP Udp2;
 #define PINS_OUTPUT  0,1,2,4,5,14,23,25,26,21,22,16
 
 
-#define LED_WIDTH 123
-#define LED_HEIGHT_PER_STRIP 3
-#define LED_HEIGHT NUM_STRIPS*LED_HEIGHT_PER_STRIP
-#define NUM_LEDS NUM_STRIPS * NUM_LEDS_PER_STRIP
-#define NUM_LEDS_PER_STRIP LED_HEIGHT_PER_STRIP*LED_WIDTH
+
 //Define table orientation this is where the pixel 0 is
 #define DOWN_RIGHT   0 //natural mode no transpostion to be made
 #define DOWN_LEFT    1 //We turn 90° clock wise
@@ -117,7 +134,7 @@ CRGB lettrefont1[35];
 CRGB lettrefont2[64];
 CRGB leds[NUM_LEDS];
 uint8_t *readbuffer;
-CRGB *Tpic;
+CRGB Tpic[NUM_LEDS];
 //unsigned char Tpic2[NUM_LEDS*3+1];
 int tableOrientation=DOWN_RIGHT; //DOWN_RIGHT_INV;
 long int k=0;
@@ -145,10 +162,16 @@ int previousDataLength = 0;
 byte broadcast[] = {10, 0, 1, 255};
 
 
+#include <NintendoExtensionCtrl.h>
+
+NESMiniController nes;
+
 //this function is only used for me 'cause half of my strip are GRB instead of RGB
 
 void replaceled()
 {
+  //return;
+   
  // return;
   int offset=0;
   for(int i=0;i<123;i++)
@@ -161,7 +184,7 @@ void replaceled()
    leds[i+offset].r= s;
    //CRGB((s&0x0F000)>>8,(s&0x00FF0000)>>16 ,s & 0xFF) ;  //(leds[i+offset] & 0xFF) |  ( (leds[i+offset] & 0x00FF00L)<<8   ) |  (  (leds[i+offset] & 0xFF0000L)>>8  );
  }
- offset=24*LED_WIDTH;
+ /*offset=24*LED_WIDTH;
   for(int i=0;i<24*LED_WIDTH;i++)
  {
    byte s=leds[i+offset].g;
@@ -171,14 +194,48 @@ void replaceled()
    leds[i+offset].g= leds[i+offset].r;
    leds[i+offset].r= s; 
    //CRGB((s&0x0F000)>>8,(s&0x00FF0000)>>16 ,s & 0xFF) ;  //(leds[i+offset] & 0xFF) |  ( (leds[i+offset] & 0x00FF00L)<<8   ) |  (  (leds[i+offset] & 0xFF0000L)>>8  );
+ }*/
+ offset=34*LED_WIDTH+54+4;
+ for(int i=0;i<3;i++)
+ {
+   byte s=leds[i+offset].g;
+  // char buff[9];
+   // my_itoa (s,buff,16,8);
+    //Serial.println(buff);
+   leds[i+offset].g= leds[i+offset].r;
+   leds[i+offset].r= s; 
  }
  //on met les boards en noir
-
+/*
  for (int i=0;i<LED_HEIGHT;i++)
  {
   leds[i*LED_WIDTH]=CRGB::Black;
   leds[(i+1)*LED_WIDTH-1]=CRGB::Black;
- }
+ }*/
+//trun();
+}
+
+void exchange(int a,int b)
+  {
+    //exchange 1 et 7
+    for(int i=0;i<NUM_LEDS_PER_STRIP;i++)
+    {
+      CRGB k=leds[a*NUM_LEDS_PER_STRIP+i];
+      leds[a*NUM_LEDS_PER_STRIP+i]=leds[b*NUM_LEDS_PER_STRIP+i];
+      leds[b*NUM_LEDS_PER_STRIP+i]=k;
+      
+    }
+  }
+
+void trun()
+{
+  exchange(0,6); //1-7
+  exchange(2,4); //3-5
+  exchange(8,14); //9-15
+ exchange(10,12); //11-13
+//  exchange(1,7);
+ // exchange(3,5);
+  
 }
 uint8_t  gamma8[] = {
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,8,8,8,9,9,9,10,10,10,11,11,11,12,12,13,13,14,14,14,15,15,16,16,17,17,18,18,19,19,20,21,21,22,22,23,23,24,25,25,26,27,27,28,29,29,30,31,31,32,33,34,34,35,36,37,37,38,39,40,41,42,42,43,44,45,46,47,48,49,50,51,52,52,53,54,55,56,57,59,60,61,62,63,64,65,66,67,68,69,71,72,73,74,75,77,78,79,80,82,83,84,85,87,88,89,91,92,93,95,96,98,99,100,102,103,105,106,108,109,111,112,114,115,117,119,120,122,123,125,127,128,130,132,133,135,137,138,140,142,144,145,147,149,151,153,155,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,190,192,194,197,199,201,203,205,207,210,212,214,216,219,221,223,226,228,230,233,235,237,240,242,245,247,250,252,255,
@@ -638,7 +695,7 @@ void displayPicInv( CRGB *pica, int x0, int y0, int h, int w)
                 if (y % 2 == 0)
                 {
                     if (x0 < 0)
-                    {
+                    { 
                         int nh = wmin + x0;
                         if (nh > 0)
                             memcpy(&leds[LED_WIDTH * y], &Tpic[(y - y0) *wmin - x0], nh * sizeof(CRGB));
@@ -2620,9 +2677,9 @@ server.on("/anim", HTTP_GET, [] {
          }
          if(newanim==4)
          {
-          if(Tpic!=NULL)
-            free(Tpic);
-           Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
+         // if(Tpic!=NULL)
+          //  free(Tpic);
+           //Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
          }
           if(newanim==63)
          {
@@ -2632,13 +2689,13 @@ server.on("/anim", HTTP_GET, [] {
          }
           if(newanim==5)
          {
-          if(Tpic!=NULL)
-            free(Tpic);
-          Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
-          if(Tpic==NULL)
-           Serial.println("no more memory");
-           else
-           Serial.println("TPIC Creé");
+         // if(Tpic!=NULL)
+          //  free(Tpic);
+          //Tpic=(CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
+         // if(Tpic==NULL)
+          // Serial.println("no more memory");
+          // else
+          // Serial.println("TPIC Creé");
            
          }
               if (newanim==55)
@@ -2760,16 +2817,27 @@ void setup() {
    digitalWrite(27,HIGH);
   String g="BIENVENU ET JOYEUX ANNIVERSAIRE ADAM";
   
- 
+ nes.begin();
+
+ if(nes.connect()) {
+  if (nes.isKnockoff()) {  // Uh oh, looks like your controller isn't genuine?
+    nes.setRequestSize(8);  // Requires 8 or more bytes for knockoff controllers
+  }
+    Serial.println("NES Classic Controller not connected!");
+    delay(1000);
+  }
+
+  
   g.toCharArray(mess, g.length()+1);
 
 //mess[10]=13;
   
-  anim=3;
+  anim=1;
   xTaskCreatePinnedToCore(FastLEDshowTask, "FastLEDshowTask", 2000, NULL,2, &FastLEDshowTaskHandle, FASTLED_SHOW_CORE);
   xTaskCreatePinnedToCore(FastLEDshowTask2, "FastLEDshowTask2", 2000, NULL,3, &FastLEDshowTaskHandle2, FASTLED_SHOW_CORE);
  
   calculatecos();
+  /*
   FastLED.addLeds<LED_TYPE, LED_PIN1, COLOR_ORDER>(leds, 0, NUM_LEDS_PER_STRIP);
         FastLED.addLeds<LED_TYPE, LED_PIN2, COLOR_ORDER>(leds, NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
         FastLED.addLeds<LED_TYPE, LED_PIN3, COLOR_ORDER>(leds, 2 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
@@ -2789,6 +2857,9 @@ void setup() {
         FastLED.addLeds<LED_TYPE, LED_PIN14, COLOR_ORDER>(leds, 13 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
         FastLED.addLeds<LED_TYPE, LED_PIN15, COLOR_ORDER>(leds, 14 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
         FastLED.addLeds<LED_TYPE, LED_PIN16, COLOR_ORDER>(leds, 15 * NUM_LEDS_PER_STRIP, NUM_LEDS_PER_STRIP);
+        */
+
+        FastLED.addLeds<VIRTUAL_DRIVER,Pins,CLOCK_PIN, LATCH_PIN>(leds,NUM_LEDS_PER_STRIP);
   // LEDS.addLeds<WS2812_PORTA,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
   // LEDS.addLeds<WS2811_PORTB,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
   // LEDS.addLeds<WS2811_PORTD,NUM_STRIPS>(leds, NUM_LEDS_PER_STRIP);
@@ -2829,11 +2900,16 @@ FastLEDshowESP32();
 // controller.showPixels(); //FastlLed.show()
 FastLEDshowESP32();
 // controller.showPixels(); //FastlLed.show()
+//while(1)
+//{
     afficheMessage("INIT",5,5);
+    //trun();
+    replaceled();
     FastLEDshowESP32();
    //    controller.showPixels(); //FastlLed.show()
      //show();
-      FastLED.delay(20 );
+      FastLED.delay(200 );
+//}
   // delay(1000);
   solidColor=bgColor;
   calculghosts(solidColor);
@@ -2903,6 +2979,7 @@ int retrywifi=0;
 
     initServer();
      server.begin();
+     /*
 SPI.begin(33,35,32,27);
     
     if(!SD.begin(27,SPI,80000000)){
@@ -2925,7 +3002,7 @@ SPI.begin(33,35,32,27);
        myFile = SD.open(filename);
        if(!myFile)
           Serial.println("no file found");
-    }
+    }*/
 
     //initTetris();
 
@@ -3027,7 +3104,21 @@ void loop() {
 #define NUM_STRIPS 16
 #define LED_WIDTH 30
 #define LED_HEIGHT_PER_STRIP 14*/
-
+boolean success=nes.update();
+nes.fixKnockoffData();
+if(nes.dpadUp())
+{
+anim++;
+firsttime=true;
+delay(100);
+}
+if(nes.dpadDown())
+if(anim>0)
+{
+    anim--;
+    firsttime=true;
+    delay(100);
+}
 
 switch (anim)
 {
@@ -3071,18 +3162,20 @@ break;
 
 case 5:
 {
-
+setTableBrightness(20);
   if(firsttime)
   {
+    setTableBrightness(20);
     firstpacket=false;
     firsttime=false;
     fill(bgColor);
     afficheMessage("READY TO STREAM", 1, 20);
     replaceled();
+    //FastLEDshowESP32();
     FastLEDshowESP32();
-  //  FastLEDshowESP32();
+  //FastLED.show();
     Udp2.begin(100);
-     artnetPacket2=(char*)malloc((123*3*2+1)*sizeof(char));
+     artnetPacket2=(char*)malloc((123*3*3+1)*sizeof(char));
      if(artnetPacket2==NULL)
       {
         Serial.println("impossible to create buffer");
@@ -3101,22 +3194,28 @@ case 5:
 
  while (sync!=syncmax1 or sync2!=syncmax2)//sync!=syncmax or sync2!=syncmax2 
  { 
+
+ //  Serial.printf("wait\n");
+
 int packetSize = Udp2.parsePacket();
       if(packetSize>0)
       {
-       //Serial.printf("size:%d\n",packetSize);
+       
         firstpacket=true;
       Udp2.read(artnetPacket2, packetSize);
+      //Serial.printf("size:%d packet:%d\n",packetSize,artnetPacket2[0]);
      // memcpy(&Tpic[123*2*(artnetPacket2[0])],artnetPacket2 + 1,123*3*2);
      //Serial.printf("univers:%d\n",artnetPacket2[0]);
       if(artnetPacket2[0]==255)
       {
         Serial.printf("new value bru:%d\n",artnetPacket2[1]);
        setTableBrightness(artnetPacket2[1]);
+       setTableBrightness(20);
       }
       else
       {
-       //Serial.printf("Univers %d\n",artnetPacket2[0]);
+       //Serial.printf("Univers %d  size:%d\n",artnetPacket2[0],packetSize);
+      // Serial.printf("size:%d\n",packetSize);
         memcpy(&Tpic[123*2*(artnetPacket2[0])],artnetPacket2 + 1,123*3*2);
             if (artnetPacket2[0]==0)
             {
@@ -3141,10 +3240,12 @@ int packetSize = Udp2.parsePacket();
          break;   
         }
     }
+     Udp2.flush();
  }
  if(firstpacket)
  {
- FastLEDshowESP32();
+  //Serial.printf("found\n");
+ FastLEDshowESP322();
  //delay(1);
  }
 }
@@ -3194,8 +3295,8 @@ break;
     disp=false;
   if(artnet.read()==1)
   {
-    Serial.println("on display");
-      FastLEDshowESP322();
+    //Serial.println("on display");
+      FastLEDshowESP32();
   }
                //xTaskNotifyGive(FastLEDshowTaskHandle2);
              artnet.resetsync();
@@ -3232,20 +3333,20 @@ fill(bgColor);
               }
               //r=(r+(int)k/10)%20;
              //fill(CRGB(5, 5, 5));
-              dessinePoly(61,24, r,k*pi/360,3,CRGB::Red);
+              dessinePoly(61,24, r,k*pi/360,3,CRGB(255,0,0));
              int r1=r-10;
-             dessinePoly(61,24, r1,k*1.5*pi/360,6,CRGB::Green);
+             dessinePoly(61,24, r1,k*1.5*pi/360,6,CRGB(0,255,0));
   
               r1=r-20;
  
-             dessinePoly(61,24, r1,-k*pi/360,5,CRGB::Yellow);
+             dessinePoly(61,24, r1,-k*pi/360,5,CRGB(0,255,255));
               r1=r-30;
-           dessinePoly(61,24, r1,+k*2*pi/360,4,CRGB::Blue);
+           dessinePoly(61,24, r1,+k*2*pi/360,4,CRGB(0,0,255));
                      
               r1=r-40;      
-             dessinePoly(61,24, r1,-k*1.5*pi/360,3,CRGB::Purple);
+             dessinePoly(61,24, r1,-k*1.5*pi/360,3,CRGB(255,0,255));
              r1=r-50;
-             dessinePoly(61,24, r1,k*1.5*pi/360,6,CRGB::Green);
+             dessinePoly(61,24, r1,k*1.5*pi/360,6,CRGB(255,255,255));
   
               r1=r-60;
  
@@ -3255,6 +3356,7 @@ fill(bgColor);
                      
               r1=r-80;      
              dessinePoly(61,24, r1,-k*1.5*pi/360,3,CRGB::Blue);
+            // fill_solid(leds, NUM_LEDS, CRGB(255,0,0));
              replaceled();
 
 }
@@ -3311,7 +3413,7 @@ fill(bgColor);
              circleFilled(50,40,r-25,CRGB::Cyan);
              circleFilled(110,40,r-25,CRGB::Purple);
              replaceled();
-             delay(1);
+             //delay(1);
 
  
 /*
@@ -3899,7 +4001,7 @@ case 8:
     afficheMessage("READY TO LAMP", 1, 20);
     replaceled();
     FastLEDshowESP32();
-    FastLEDshowESP32();
+   // FastLEDshowESP32();
   }
   disp=true;
 }
@@ -3914,7 +4016,7 @@ case 9:
     afficheMessage("READY TO PAINT", 1, 20);
     replaceled();
     FastLEDshowESP32();
-    FastLEDshowESP32();
+    //FastLEDshowESP32();
     //delay(2000);
     //fill(CRGB(10,10,10));
   }
@@ -3934,7 +4036,7 @@ break;
 
  */
      
-long time3=ESP.getCycleCount();
+//long time3=ESP.getCycleCount();
 // controller.showPixels(); //FastlLed.show()
   /* if( authdisplay)
     {
@@ -3946,25 +4048,26 @@ long time3=ESP.getCycleCount();
       
     }*/
     if(disp)
-   FastLEDshowESP32();
+   //FastLEDshowESP32();
+   FastLED.show();
                                  
-                          /*       long time2=ESP.getCycleCount();
-                             
-long delta=time3-time2;
+                            //   long time2=ESP.getCycleCount();
+    /*                         
+long delta=time2-time3;
      if(maxi<(float)240000000/(delta))
      {
        maxi=(float)240000000/(delta);
-     //  Serial.printf("new max%f\n",maxi);
+       Serial.printf("new max%f\n",maxi);
      }
       if(mini>(float)240000000/(delta))
             {
        mini=(float)240000000/(delta);
-       //Serial.printf("new mini%f\n",mini);
+       Serial.printf("new mini%f\n",mini);
      }
-    // Serial.printf("totoal fps: %f\n",(float)240000000/(time2-time1));
+    //Serial.printf("totoal fps: %f\n",(float)240000000/(time2-time1));
  //FastLED.delay(10);
- */
  
+ */
 
 //delay(5);
 
